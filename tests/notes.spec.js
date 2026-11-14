@@ -22,3 +22,17 @@ test('malformed storage is preserved and blank notes are rejected', async ({ pag
   await expect(page.locator('#addTxt')).toHaveValue('Keep this draft');
   expect(await page.evaluate(() => localStorage.getItem('notes'))).toBe('broken');
 });
+test('edits save explicitly and cancel leaves stored text unchanged', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#addTxt').fill('Original');
+  await page.locator('#addBtn').click();
+  await page.getByRole('button', { name: 'Edit note 1', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Edit text for note 1' }).fill('Saved edit');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await page.reload();
+  await expect(page.locator('.card-text')).toHaveText('Saved edit');
+  await page.getByRole('button', { name: 'Edit note 1', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Edit text for note 1' }).fill('Discard');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.locator('.card-text')).toHaveText('Saved edit');
+});

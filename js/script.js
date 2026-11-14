@@ -56,7 +56,56 @@ function showNotes() {
                 status.textContent = 'Note deleted.';
             }
         });
-        body.append(title, content, remove);
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'btn btn-secondary';
+        edit.textContent = 'Edit Note';
+        edit.setAttribute('aria-label', 'Edit note ' + (index + 1));
+        edit.addEventListener('click', () => {
+            const editor = document.createElement('textarea');
+            editor.className = 'form-control';
+            editor.value = notes[index];
+            editor.setAttribute('aria-label', 'Edit text for note ' + (index + 1));
+            const save = document.createElement('button');
+            save.type = 'button';
+            save.className = 'btn btn-primary';
+            save.textContent = 'Save changes';
+            const cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'btn btn-secondary';
+            cancel.textContent = 'Cancel';
+            function restore() {
+                editor.replaceWith(content);
+                save.remove();
+                cancel.remove();
+                edit.hidden = false;
+                remove.hidden = false;
+                edit.focus();
+            }
+            save.addEventListener('click', () => {
+                const value = editor.value.trim();
+                if (!value) {
+                    status.textContent = 'A note cannot be empty.';
+                    editor.focus();
+                    return;
+                }
+                if (persist(notes.map((note, position) => position === index ? value : note))) {
+                    content.textContent = value;
+                    restore();
+                    status.textContent = 'Changes saved.';
+                }
+            });
+            cancel.addEventListener('click', restore);
+            editor.addEventListener('keydown', event => {
+                if (event.key === 'Escape') restore();
+            });
+            content.replaceWith(editor);
+            edit.hidden = true;
+            remove.hidden = true;
+            body.append(save, cancel);
+            editor.focus();
+        });
+        body.append(title, content, edit, remove);
         card.append(body);
         notesElm.append(card);
     });
@@ -79,7 +128,7 @@ document.getElementById('addBtn').addEventListener('click', () => {
 });
 search.addEventListener('input', () => {
     for (const card of notesElm.querySelectorAll('.noteCard')) {
-        card.hidden = !card.querySelector('p').textContent.toLowerCase().includes(search.value.toLowerCase());
+        card.hidden = !(card.querySelector('p')?.textContent ?? card.querySelector('textarea').value).toLowerCase().includes(search.value.toLowerCase());
     }
 });
 showNotes();
