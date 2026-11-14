@@ -1,0 +1,98 @@
+const { test, expect } = require('@playwright/test');
+test('legacy notes render as text and additions survive reload', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => localStorage.setItem('notes', JSON.stringify(['<img src=x onerror=alert(1)>'])));
+  await page.reload();
+  await expect(page.locator('.card-text')).toHaveText('<img src=x onerror=alert(1)>');
+  await expect(page.locator('#notes img')).toHaveCount(0);
+  await page.locator('#addTxt').fill('Second note');
+  await page.locator('#addBtn').click();
+  await page.reload();
+  await expect(page.locator('.noteCard')).toHaveCount(2);
+});
+test('malformed storage is preserved and blank notes are rejected', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#addBtn').click();
+  await expect(page.locator('.noteCard')).toHaveCount(0);
+  await page.evaluate(() => localStorage.setItem('notes', 'broken'));
+  await page.reload();
+  await expect(page.getByRole('status').first()).toContainText('could not be read');
+  await page.locator('#addTxt').fill('Keep this draft');
+  await page.locator('#addBtn').click();
+  await expect(page.locator('#addTxt')).toHaveValue('Keep this draft');
+  expect(await page.evaluate(() => localStorage.getItem('notes'))).toBe('broken');
+});
+test('edits save explicitly and cancel leaves stored text unchanged', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#addTxt').fill('Original');
+  await page.locator('#addBtn').click();
+  await page.getByRole('button', { name: 'Edit note 1', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Edit text for note 1' }).fill('Saved edit');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await page.reload();
+  await expect(page.locator('.card-text')).toHaveText('Saved edit');
+  await page.getByRole('button', { name: 'Edit note 1', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Edit text for note 1' }).fill('Discard');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.locator('.card-text')).toHaveText('Saved edit');
+});
+test('search ignores case, survives mutations and Enter preserves drafts', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#addTxt').fill('HELLO World');
+  await page.locator('#addBtn').click();
+  await page.locator('#searchTxt').fill(' hello ');
+  await expect(page.locator('.noteCard:visible')).toHaveCount(1);
+  await page.locator('#addTxt').fill('Unrelated');
+  await page.locator('#addBtn').click();
+  await expect(page.locator('.noteCard:visible')).toHaveCount(1);
+  await page.locator('#addTxt').fill('Unsaved draft');
+  await page.locator('#searchTxt').press('Enter');
+  await expect(page.locator('#addTxt')).toHaveValue('Unsaved draft');
+  await page.locator('#searchTxt').fill('missing');
+  await expect(page.locator('#searchResults')).toContainText('0 matching notes');
+  await page.locator('#searchTxt').fill('');
+  await expect(page.locator('.noteCard:visible')).toHaveCount(2);
+});
+test('labeled controls and long multiline notes fit the viewport', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Write a note').fill('First line\n' + 'LongText'.repeat(80));
+  await page.getByRole('button', { name: 'Add Note', exact: true }).click();
+  await expect(page.getByLabel('Write a note')).toBeFocused();
+  await expect(page.locator('.card-text')).toContainText('First line\n');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath('notes.png'), fullPage: true });
+});
+test('storage write failures retain the draft and cross-tab changes are never overwritten', async ({ page, context }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    window.originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => { throw new Error('quota'); };
+  });
+  await page.locator('#addTxt').fill('Keep draft');
+  await page.locator('#addBtn').click();
+  await expect(page.locator('#addTxt')).toHaveValue('Keep draft');
+  await expect(page.getByRole('status').first()).toContainText('Could not save');
+  await page.evaluate(() => { Storage.prototype.setItem = window.originalSetItem; });
+  const second = await context.newPage();
+  await second.goto('/');
+  await second.locator('#addTxt').fill('Other tab');
+  await second.locator('#addBtn').click();
+  await page.locator('#addBtn').click();
+  await expect(page.getByRole('status').first()).toContainText('another tab');
+  await expect(page.locator('#addTxt')).toHaveValue('Keep draft');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('notes')))).toEqual(['Other tab']);
+});
+test('adding or deleting cannot discard an open edit', async ({ page }) => {
+  await page.goto('/');
+  for (const value of ['One', 'Two']) {
+    await page.locator('#addTxt').fill(value);
+    await page.locator('#addBtn').click();
+  }
+  await page.getByRole('button', { name: 'Edit note 1', exact: true }).click();
+  await page.getByLabel('Edit text for note 1').fill('Unsaved edit');
+  await page.locator('#addTxt').fill('New note');
+  await page.locator('#addBtn').click();
+  await page.getByRole('button', { name: 'Delete note 2', exact: true }).click();
+  await expect(page.getByLabel('Edit text for note 1')).toHaveValue('Unsaved edit');
+  await expect(page.locator('.noteCard')).toHaveCount(2);
+});

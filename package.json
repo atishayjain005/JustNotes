@@ -1,0 +1,12 @@
+{
+  "name": "justnotes",
+  "private": true,
+  "scripts": {
+    "check": "node --check js/script.js",
+    "test": "playwright test",
+    "start": "python3 -m http.server 4175 --bind 127.0.0.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0"
+  }
+}
