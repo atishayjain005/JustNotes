@@ -53,3 +53,12 @@ test('search ignores case, survives mutations and Enter preserves drafts', async
   await page.locator('#searchTxt').fill('');
   await expect(page.locator('.noteCard:visible')).toHaveCount(2);
 });
+test('labeled controls and long multiline notes fit the viewport', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Write a note').fill('First line\n' + 'LongText'.repeat(80));
+  await page.getByRole('button', { name: 'Add Note', exact: true }).click();
+  await expect(page.getByLabel('Write a note')).toBeFocused();
+  await expect(page.locator('.card-text')).toContainText('First line\n');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath('notes.png'), fullPage: true });
+});
