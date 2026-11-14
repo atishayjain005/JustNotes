@@ -6,6 +6,10 @@ const search = document.getElementById('searchTxt');
 const status = document.createElement('p');
 status.setAttribute('role', 'status');
 notesElm.before(status);
+const results = document.createElement('p');
+results.setAttribute('role', 'status');
+results.id = 'searchResults';
+notesElm.before(results);
 let notes = [];
 let storageReadable = true;
 
@@ -93,6 +97,7 @@ function showNotes() {
                     content.textContent = value;
                     restore();
                     status.textContent = 'Changes saved.';
+                    filterNotes();
                 }
             });
             cancel.addEventListener('click', restore);
@@ -110,6 +115,7 @@ function showNotes() {
         notesElm.append(card);
     });
     if (!notes.length) notesElm.textContent = 'No notes yet. Add your first note above.';
+    filterNotes();
 }
 
 document.getElementById('addBtn').addEventListener('click', () => {
@@ -126,9 +132,21 @@ document.getElementById('addBtn').addEventListener('click', () => {
         addTxt.focus();
     }
 });
-search.addEventListener('input', () => {
+function filterNotes() {
+    const query = search.value.trim().toLocaleLowerCase();
+    let matches = 0;
     for (const card of notesElm.querySelectorAll('.noteCard')) {
-        card.hidden = !(card.querySelector('p')?.textContent ?? card.querySelector('textarea').value).toLowerCase().includes(search.value.toLowerCase());
+        const text = card.querySelector('p')?.textContent ?? card.querySelector('textarea').value;
+        card.hidden = !text.toLocaleLowerCase().includes(query);
+        if (!card.hidden) matches++;
     }
+    results.textContent = query
+        ? matches + ' matching note' + (matches === 1 ? '' : 's') + (matches ? '.' : '. Try another search.')
+        : '';
+}
+search.addEventListener('input', filterNotes);
+search.closest('form').addEventListener('submit', event => {
+    event.preventDefault();
+    filterNotes();
 });
 showNotes();

@@ -16,7 +16,7 @@ test('malformed storage is preserved and blank notes are rejected', async ({ pag
   await expect(page.locator('.noteCard')).toHaveCount(0);
   await page.evaluate(() => localStorage.setItem('notes', 'broken'));
   await page.reload();
-  await expect(page.getByRole('status')).toContainText('could not be read');
+  await expect(page.getByRole('status').first()).toContainText('could not be read');
   await page.locator('#addTxt').fill('Keep this draft');
   await page.locator('#addBtn').click();
   await expect(page.locator('#addTxt')).toHaveValue('Keep this draft');
@@ -35,4 +35,21 @@ test('edits save explicitly and cancel leaves stored text unchanged', async ({ p
   await page.getByRole('textbox', { name: 'Edit text for note 1' }).fill('Discard');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.locator('.card-text')).toHaveText('Saved edit');
+});
+test('search ignores case, survives mutations and Enter preserves drafts', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#addTxt').fill('HELLO World');
+  await page.locator('#addBtn').click();
+  await page.locator('#searchTxt').fill(' hello ');
+  await expect(page.locator('.noteCard:visible')).toHaveCount(1);
+  await page.locator('#addTxt').fill('Unrelated');
+  await page.locator('#addBtn').click();
+  await expect(page.locator('.noteCard:visible')).toHaveCount(1);
+  await page.locator('#addTxt').fill('Unsaved draft');
+  await page.locator('#searchTxt').press('Enter');
+  await expect(page.locator('#addTxt')).toHaveValue('Unsaved draft');
+  await page.locator('#searchTxt').fill('missing');
+  await expect(page.locator('#searchResults')).toContainText('0 matching notes');
+  await page.locator('#searchTxt').fill('');
+  await expect(page.locator('.noteCard:visible')).toHaveCount(2);
 });
