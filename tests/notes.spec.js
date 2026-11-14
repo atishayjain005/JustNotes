@@ -62,3 +62,37 @@ test('labeled controls and long multiline notes fit the viewport', async ({ page
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath('notes.png'), fullPage: true });
 });
+test('storage write failures retain the draft and cross-tab changes are never overwritten', async ({ page, context }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    window.originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => { throw new Error('quota'); };
+  });
+  await page.locator('#addTxt').fill('Keep draft');
+  await page.locator('#addBtn').click();
+  await expect(page.locator('#addTxt')).toHaveValue('Keep draft');
+  await expect(page.getByRole('status').first()).toContainText('Could not save');
+  await page.evaluate(() => { Storage.prototype.setItem = window.originalSetItem; });
+  const second = await context.newPage();
+  await second.goto('/');
+  await second.locator('#addTxt').fill('Other tab');
+  await second.locator('#addBtn').click();
+  await page.locator('#addBtn').click();
+  await expect(page.getByRole('status').first()).toContainText('another tab');
+  await expect(page.locator('#addTxt')).toHaveValue('Keep draft');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('notes')))).toEqual(['Other tab']);
+});
+test('adding or deleting cannot discard an open edit', async ({ page }) => {
+  await page.goto('/');
+  for (const value of ['One', 'Two']) {
+    await page.locator('#addTxt').fill(value);
+    await page.locator('#addBtn').click();
+  }
+  await page.getByRole('button', { name: 'Edit note 1', exact: true }).click();
+  await page.getByLabel('Edit text for note 1').fill('Unsaved edit');
+  await page.locator('#addTxt').fill('New note');
+  await page.locator('#addBtn').click();
+  await page.getByRole('button', { name: 'Delete note 2', exact: true }).click();
+  await expect(page.getByLabel('Edit text for note 1')).toHaveValue('Unsaved edit');
+  await expect(page.locator('.noteCard')).toHaveCount(2);
+});

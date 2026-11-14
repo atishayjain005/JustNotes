@@ -12,9 +12,11 @@ results.id = 'searchResults';
 notesElm.before(results);
 let notes = [];
 let storageReadable = true;
+let storageSnapshot;
 
 try {
-    const stored = JSON.parse(localStorage.getItem('notes') || '[]');
+    storageSnapshot = localStorage.getItem('notes');
+    const stored = JSON.parse(storageSnapshot || '[]');
     if (!Array.isArray(stored) || stored.some(note => typeof note !== 'string')) {
         throw new Error('Invalid saved notes');
     }
@@ -27,7 +29,12 @@ try {
 function persist(next) {
     if (!storageReadable) return false;
     try {
+        if (localStorage.getItem('notes') !== storageSnapshot) {
+            status.textContent = 'Notes changed in another tab. Copy any unsaved text, then reload before saving. Nothing has been overwritten.';
+            return false;
+        }
         localStorage.setItem('notes', JSON.stringify(next));
+        storageSnapshot = JSON.stringify(next);
         notes = next;
         return true;
     } catch {
@@ -55,6 +62,10 @@ function showNotes() {
         remove.textContent = 'Delete Note';
         remove.setAttribute('aria-label', 'Delete note ' + (index + 1));
         remove.addEventListener('click', () => {
+            if (notesElm.querySelector('textarea')) {
+                status.textContent = 'Save or cancel your open edit before deleting a note.';
+                return;
+            }
             if (persist(notes.filter((_, position) => position !== index))) {
                 showNotes();
                 status.textContent = 'Note deleted.';
@@ -119,6 +130,10 @@ function showNotes() {
 }
 
 document.getElementById('addBtn').addEventListener('click', () => {
+    if (notesElm.querySelector('textarea')) {
+        status.textContent = 'Save or cancel your open edit before adding another note.';
+        return;
+    }
     const text = addTxt.value.trim();
     if (!text) {
         status.textContent = 'Write a note before adding it.';
